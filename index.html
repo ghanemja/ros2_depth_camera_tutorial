@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ROS2 RealSense D435 HTTP Streaming Demo</title>
+  <style>
+    :root {
+      --ink: #000000;
+      --muted: #525252;
+      --bg0: #f5f5f5;
+      --bg1: rgba(37, 99, 235, 0.12);
+      --bg2: rgba(59, 130, 246, 0.12);
+      --card: #ffffff;
+      --border: #d4d4d4;
+      --accent: #2563eb;
+      --accent-ghost: rgba(37, 99, 235, 0.15);
+      --radius: 16px;
+      --shadow: 0 10px 30px rgba(2, 6, 23, 0.12);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      --toc-w: 230px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      font-size: 17px;
+      line-height: 1.65;
+      color: var(--ink);
+      background:
+        radial-gradient(900px 600px at 5% -10%, var(--bg1), transparent 70%),
+        radial-gradient(1200px 700px at 110% 10%, var(--bg2), transparent 70%),
+        var(--bg0);
+    }
+
+    /* Header */
+    header {
+      position: sticky; top: 0; z-index: 10;
+      backdrop-filter: saturate(120%) blur(8px);
+      background: rgba(255,255,255,.85);
+      border-bottom: 1px solid var(--border);
+    }
+    .head-inner {
+      width: 96vw; max-width: 1800px;
+      margin: 0 auto; padding: 14px 1.5vw;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .title { font-weight: 800; letter-spacing: .2px; color: var(--accent); font-size: 20px; }
+
+    /* Layout */
+    .grid {
+      width: 96vw; max-width: 1800px;
+      margin: 24px auto; padding: 0 1.5vw;
+      display: grid;
+      grid-template-columns: var(--toc-w) 1fr;
+      gap: min(2vw, 26px);
+    }
+
+    /* TOC */
+    nav {
+      position: sticky; top: 88px; align-self: start;
+      background: rgba(255,255,255,.7);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(6px);
+    }
+    nav h3 { margin: 4px 0 10px; font-size: 14px; color: var(--ink); letter-spacing: .2px; font-weight: 700; }
+    nav a {
+      display: block;
+      padding: 10px 12px; margin: 8px 0;
+      color: var(--ink); text-decoration: none;
+      border-radius: 10px; border: 1px solid transparent;
+      transition: background .15s ease, border-color .15s ease;
+      font-size: 16px;
+    }
+    nav a:hover { background: var(--accent-ghost); border-color: var(--accent); color: var(--accent); }
+    nav a.active { background: var(--accent); color: #ffffff; border-color: var(--accent); }
+
+    main { min-width: 0; color: var(--ink); }
+    
+    main p,
+    main div,
+    main ul,
+    main ol,
+    main li,
+    main span {
+      color: var(--ink);
+    }
+
+    .video-card, .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .video-card { padding: clamp(12px, 1.4vw, 22px); color: var(--ink); }
+    .video-card h4 { margin: 0 0 8px 0; font-weight: 800; color: var(--ink); }
+    .video-card p { margin: 6px 0 14px; color: var(--ink); }
+    .video-card ul { color: var(--ink); }
+    .video-card li { color: var(--ink); }
+    video { width: 100%; max-height: 560px; background: #000; border-radius: 12px; display: block; }
+    .video-tip { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+    .card .head {
+      padding: clamp(10px, 1.4vw, 16px) clamp(12px, 1.8vw, 20px);
+      background: linear-gradient(180deg, #f8fafc, #f1f5f9);
+      border-bottom: 2px solid var(--accent);
+      font-weight: 800; letter-spacing:.2px;
+      color: var(--accent);
+    }
+    .card .body {
+      padding: clamp(14px, 1.8vw, 24px) clamp(16px, 2vw, 28px);
+      color: var(--ink);
+    }
+    
+    .card .body p,
+    .card .body div,
+    .card .body ul,
+    .card .body li {
+      color: var(--ink);
+    }
+
+    .list { margin: 10px 0 0 20px; color: var(--ink); }
+    .list li { margin: 8px 0; color: var(--ink); }
+
+    .section { margin-top: clamp(22px, 2.6vw, 36px); }
+    .step-grid { display: grid; gap: clamp(22px, 2.6vw, 34px); }
+    .step {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .step .step-head {
+      padding: clamp(10px, 1.4vw, 14px) clamp(12px, 1.8vw, 18px);
+      background: linear-gradient(180deg, #f1f5f9, #e2e8f0);
+      border-bottom: 2px solid var(--accent);
+      border-left: 4px solid var(--accent);
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .step .step-body {
+      padding: clamp(14px, 2vw, 22px) clamp(16px, 2.2vw, 26px);
+      color: var(--ink);
+    }
+    
+    .step .step-body p,
+    .step .step-body div,
+    .step .step-body ul,
+    .step .step-body li {
+      color: var(--ink);
+    }
+
+    /* Code blocks + copy button */
+    pre {
+      font-family: var(--mono);
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      padding: 14px 48px 14px 14px;
+      border-radius: 12px; overflow:auto;
+      position: relative;
+      font-size: 15px;
+      white-space: pre-wrap;
+      margin: 12px 0 0;
+    }
+    
+    /* Inline code elements */
+    code:not(pre code) {
+      font-family: var(--mono);
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.9em;
+      white-space: normal;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      display: inline;
+      vertical-align: baseline;
+    }
+    
+    /* Ensure paragraphs and divs can wrap code properly */
+    p, div {
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+    }
+    
+    /* Code inside pre blocks should not have extra styling */
+    pre code {
+      background: transparent;
+      border: none;
+      padding: 0;
+      font-size: inherit;
+      white-space: pre-wrap;
+      display: block;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 8px; right: 8px;
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #ffffff;
+      border: 1px solid #d1d5db;
+      padding: 6px 10px;
+      border-radius: 10px;
+      font-size: 12px;
+      color: var(--ink);
+      cursor: pointer;
+      transition: transform .05s ease, box-shadow .15s ease, background .15s ease;
+      box-shadow: 0 2px 8px rgba(2,6,23,.05);
+    }
+    .copy-btn:hover { background: #f8fafc; }
+    .copy-btn:active { transform: translateY(1px); }
+    .copy-icon { width: 14px; height: 14px; display: inline-block; }
+    .copied { background: #ecfeff; border-color: #67e8f9; color: #155e75; }
+
+    @media (max-width: 1100px) {
+      :root { --toc-w: 200px; }
+    }
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+      nav { position: relative; top: 0; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="head-inner">
+    <div class="title">ROS2 RealSense D435 HTTP Streaming Demo</div>
+  </div>
+</header>
+
+<div class="grid">
+  <nav>
+    <h3>On this page</h3>
+    <a href="#video">Overview</a>
+    <a href="#prerequisites">PREREQUISITES</a>
+    <a href="#contents">CONTENTS</a>
+    <a href="#section-a">SECTION A: Environment Setup</a>
+    <a href="#section-b">SECTION B: RealSense Pub/Sub + HTTP</a>
+    <a href="#section-c">SECTION C: Networking across multiple machines</a>
+    <a href="#explanations">Explanations</a>
+  </nav>
+
+  <main>
+    <section class="video-card section" id="video">
+      <h4>What You Will Be Creating</h4>
+      <p>
+        The objective of this demo is to run your own ROS2 Python nodes on a desktop/laptop
+        with an Intel RealSense D435 depth camera connected over USB. You will:
+      </p>
+      <ul class="list">
+        <li>Publish RealSense <strong>color RGB frames</strong> into ROS2 from a Python node.</li>
+        <li>Publish RealSense <strong>infrared (IR) frames</strong> from the left IR sensor as a “stereo-ish” stream into ROS2.</li>
+        <li>Subscribe to both topics from a second node.</li>
+        <li>Stream the live RGB and IR feeds over HTTP as MJPEG streams with a browser toggle between modes.</li>
+      </ul>
+      <video controls playsinline preload="metadata">
+        <source src="static/result.webm" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+      <p class="video-tip">
+        The RGB stream is a standard color webcam-like feed. The IR “stereo” stream is the raw mono8 infrared image from the D435’s left IR sensor, which is what the camera uses internally for depth estimation (it is not a depth map).
+      </p>
+    </section>
+
+    <section class="card section" id="prerequisites">
+      <div class="head">PREREQUISITES</div>
+      <div class="body">
+        <div>You should have:</div>
+        <ul class="list">
+          <li>An Intel RealSense D435 plugged into your computer with the USB cable (must be a USB 3.0 port - this is the USB port directly next to the power).</li>
+          <li>A working ROS2 desktop install (ros2 and colcon) on Linux.</li>
+          <li>Python 3 available in your ROS2 environment.</li>
+        </ul>
+
+        <div><strong>Install the RealSense SDK + Python libraries</strong></div>
+        <p>Follow Intel's documentation to install <code>librealsense</code> (RealSense SDK) via the following commands:</p>
+        <pre>
+sudo apt-get update
+sudo apt-get install apt-transport-https curl gnupg2 software-properties-common -y
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://librealsense.intel.com/Debian/librealsense.pgp \
+  | sudo tee /etc/apt/keyrings/librealsense.gpg > /dev/null
+echo "deb [signed-by=/etc/apt/keyrings/librealsense.gpg] https://librealsense.intel.com/Debian/apt-repo focal main" \
+  | sudo tee /etc/apt/sources.list.d/librealsense.list
+sudo apt-get update
+cd /tmp
+wget http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb
+sudo dpkg -i libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb
+sudo apt-get install librealsense2-utils librealsense2-dev librealsense2-dbg
+        </pre>
+
+        <div>Install the Python dependencies in your ROS2 environment:</div>
+        <pre>
+sudo apt-get install ros-humble-cv-bridge
+pip install opencv-python "numpy&lt;2.0"
+        </pre>
+
+        <div><strong>Sanity check: test the USB camera connection</strong></div>
+        <p>Before using ROS2, make sure the camera works over USB with the RealSense viewer:</p>
+        <pre>
+realsense-viewer
+        </pre>
+        <p>Once launched, you should see the following:</p>
+        <img
+	  src="static/realsense_open.png"
+	  alt="RealSense RGB vs Stereo toggle GUI"
+	  style="max-width: 100%; border-radius: 12px; margin-top: 12px;"
+	>
+        <p class="video-tip">
+          If you see the D435 stream in <code>realsense-viewer</code>, the USB connection and SDK are working. Close the viewer before running the ROS2 publisher node.
+        </p>
+        <p>Once the viewer is open, you should see the camera details pop up in the left side of the viewer with the text "Add Source (1 available). Expand the "Stereo Module" and "RGB Camera" carrots to play more with the display and post-processing features.</p>
+        <img
+	  src="realsense_depth_toggle.png"
+	  alt="RealSense RGB vs Stereo toggle GUI"
+	  style="max-width: 100%; border-radius: 12px; margin-top: 12px;"
+	>
+
+      </div>
+    </section>
+
+    <section class="card section" id="contents">
+      <div class="head">CONTENTS</div>
+      <div class="body">
+        <ul class="list">
+          <li>SECTION A: Environment Setup</li>
+          <li>SECTION B: Running the RealSense Pub/Sub + HTTP Demo</li>
+          <li>SECTION C: Networking across multiple machines</li>
+          <li>Explanations</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="card section" id="section-a">
+      <div class="head">SECTION A: Environment Setup</div>
+      <div class="body step-grid">
+
+        <div class="step">
+          <div class="step-head">Step 1: Source ROS2</div>
+          <div class="step-body">
+            <div>Open a terminal and source your ROS2 environment:</div>
+            <pre>
+source /opt/ros/humble/setup.bash
+            </pre>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-head">Step 2: Create a workspace folder</div>
+          <div class="step-body">
+            <div>cd into this directory which holds the <code>index.html</code>:</div>
+            <pre>
+cd /path/to/ros2_depth_camera_tutorial
+            </pre>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="card section" id="section-b">
+      <div class="head">SECTION B: RealSense Pub/Sub + HTTP Streaming</div>
+      <div class="body step-grid">
+
+        <div class="step">
+          <div class="step-head">Step 1: RealSense Publisher Node (Python file #1)</div>
+          <div class="step-body">
+            <div>
+              <p>
+              The streams will be published in two topics. The first is /realsense/color/image_raw -> rgb.mjpg which is the unprocessed, full-color BGR frame directly from the D435’s RGB sensor. It is 640×480, 30 FPS, and does not have depth, IR or filtering. This is just the camera’s raw color output published as JPEG frames and should look like a normal webcam-style image.
+              </p>
+              <p>
+              The second topic is /realsense/stereo/image_raw -> stereo.mjpg which is the infraref stream from the realsense. This comes in the form of monochrome (mono8) direct IR sensor photon values. Simlarly to the rgb stream, this does not have depth, alignment, or filters. For display purposes only, we convert this to 3-channel. The IR feed we pass is what is used for depth estimation before any processing occurs. In later steps of this tutorial, we will appply math to the imagery data to get the depth information and perform other vision operations.
+              </p>
+              In <code>/path/to/ros2_depth_camera_tutorial</code>, create a file called
+              <code>publisher.py</code> with the following content:
+            </div>
+            <pre>
+"""
+ROS2 node that:
+- Opens an Intel RealSense D435 camera using pyrealsense2 over USB
+- Publishes:
+    - color frames as sensor_msgs/msg/Image on /realsense/color/image_raw
+    - infrared (stereo-ish) frames on /realsense/stereo/image_raw
+"""
+
+import rclpy
+from rclpy.node import Node
+
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
+
+import pyrealsense2 as rs
+import numpy as np
+
+
+class RealSensePublisher(Node):
+    def __init__(self):
+        super().__init__('realsense_camera_publisher')
+
+        # Parameters (can be overridden via ROS2 params)
+        self.color_topic = self.declare_parameter(
+            'color_topic', '/realsense/color/image_raw'
+        ).get_parameter_value().string_value
+
+        self.stereo_topic = self.declare_parameter(
+            'stereo_topic', '/realsense/stereo/image_raw'
+        ).get_parameter_value().string_value
+
+        self.get_logger().info(
+            f"Publishing RealSense color frames on:  {self.color_topic}"
+        )
+        self.get_logger().info(
+            f"Publishing RealSense stereo frames on: {self.stereo_topic}"
+        )
+
+        # Publishers
+        self.color_pub = self.create_publisher(Image, self.color_topic, 10)
+        self.stereo_pub = self.create_publisher(Image, self.stereo_topic, 10)
+        self.bridge = CvBridge()
+
+        # Setup RealSense pipeline
+        self.pipeline = rs.pipeline()
+        config = rs.config()
+
+        # Enable color stream (RGB)
+        config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+
+        # Enable infrared stream (acts as a "stereo" view)
+        # For D435: infrared 1 = left, 2 = right. We’ll use 1 here.
+        config.enable_stream(rs.stream.infrared, 1, 640, 480, rs.format.y8, 30)
+
+        self.get_logger().info("Starting RealSense pipeline...")
+        self.pipeline.start(config)
+        self.get_logger().info("RealSense pipeline started.")
+
+        # Timer for publishing frames
+        self.timer = self.create_timer(1.0 / 30.0, self.timer_callback)
+
+    def timer_callback(self):
+        # Non-blocking poll to avoid blocking the executor
+        frames = self.pipeline.poll_for_frames()
+        if not frames:
+            return
+
+        color_frame = frames.get_color_frame()
+        ir_frame = frames.get_infrared_frame(1)  # infrared camera 1 (left IR)
+
+        if not color_frame or not ir_frame:
+            return
+
+        # Convert RealSense frames to numpy arrays
+        color_image = np.asanyarray(color_frame.get_data())   # BGR
+        infrared_image = np.asanyarray(ir_frame.get_data())   # mono8
+
+        # Get a timestamp for both messages
+        stamp = self.get_clock().now().to_msg()
+
+        # Publish color
+        color_msg = self.bridge.cv2_to_imgmsg(color_image, encoding='bgr8')
+        color_msg.header.stamp = stamp
+        color_msg.header.frame_id = 'realsense_color_optical_frame'
+        self.color_pub.publish(color_msg)
+
+        # Publish infrared as stereo (mono8)
+        stereo_msg = self.bridge.cv2_to_imgmsg(infrared_image, encoding='mono8')
+        stereo_msg.header.stamp = stamp
+        stereo_msg.header.frame_id = 'realsense_infra1_optical_frame'
+        self.stereo_pub.publish(stereo_msg)
+
+    def destroy_node(self):
+        # Stop the RealSense pipeline cleanly
+        try:
+            self.get_logger().info("Stopping RealSense pipeline...")
+            self.pipeline.stop()
+        except Exception as e:
+            self.get_logger().warn(f"Error stopping pipeline: {e}")
+        super().destroy_node()
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = RealSensePublisher()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.get_logger().info("Shutting down RealSense publisher...")
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+            </pre>
+            <p class="video-tip">
+              The RGB stream (<code>/realsense/color/image_raw</code>) is a standard 640×480, 30 FPS, BGR8 color image.
+              The stereo stream (<code>/realsense/stereo/image_raw</code>) is a raw mono8 infrared image from the left IR sensor.
+              It is what the D435 uses internally for depth calculation, not a depth map itself.
+            </p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-head">Step 2: HTTP Streaming Subscriber Node (Python file #2)</div>
+          <div class="step-body">
+            <div>
+              In the same folder, create a file called
+              <code>subscriber.py</code> with the following content.
+              This node subscribes to both the RGB and IR topics and exposes them as MJPEG streams
+              over HTTP, plus a simple HTML page with an RGB / Stereo toggle.
+            </div>
+            <pre>
+"""
+ROS2 node that:
+- Subscribes to:
+    /realsense/color/image_raw
+    /realsense/stereo/image_raw
+- Streams both as MJPEG over HTTP:
+    /rgb.mjpg
+    /stereo.mjpg
+- Serves an HTML page at http://&lt;this-machine-ip&gt;:8000/
+  with a toggle to switch between RGB and Stereo.
+"""
+
+import threading
+import time
+import sys
+from typing import Optional
+
+import rclpy
+from rclpy.node import Node
+
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
+
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import urlparse
+
+import cv2
+
+# Global frame storage
+_latest_rgb_jpeg_lock = threading.Lock()
+_latest_rgb_jpeg: Optional[bytes] = None
+
+_latest_stereo_jpeg_lock = threading.Lock()
+_latest_stereo_jpeg: Optional[bytes] = None
+
+
+class RealSenseHttpSubscriber(Node):
+    def __init__(self):
+        super().__init__('realsense_http_subscriber')
+
+        # Fixed topics to match the publisher
+        self.color_topic = "/realsense/color/image_raw"
+        self.stereo_topic = "/realsense/stereo/image_raw"
+
+        self.get_logger().info(f"Subscribing to RGB:    {self.color_topic}")
+        self.get_logger().info(f"Subscribing to Stereo: {self.stereo_topic}")
+
+        self.bridge = CvBridge()
+
+        # Subscribers
+        self.rgb_sub = self.create_subscription(
+            Image, self.color_topic, self.rgb_callback, 10
+        )
+        self.stereo_sub = self.create_subscription(
+            Image, self.stereo_topic, self.stereo_callback, 10
+        )
+
+        # HTTP server
+        self.get_logger().info("Starting HTTP server on port 8000...")
+        self.http_server = start_http_server(port=8000)
+        self.get_logger().info("HTTP server started.")
+
+    # ---------------------------------------------------------
+    # Callbacks
+    # ---------------------------------------------------------
+    def rgb_callback(self, msg: Image):
+        global _latest_rgb_jpeg
+
+        try:
+            frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        except Exception as e:
+            self.get_logger().warning(f"[RGB] Conversion error: {e}")
+            return
+
+        ok, jpeg = cv2.imencode('.jpg', frame)
+        if not ok:
+            self.get_logger().warning("[RGB] JPEG encoding failed")
+            return
+
+        with _latest_rgb_jpeg_lock:
+            _latest_rgb_jpeg = jpeg.tobytes()
+
+    def stereo_callback(self, msg: Image):
+        global _latest_stereo_jpeg
+
+        try:
+            # Publisher sends mono8 (infrared)
+            img = self.bridge.imgmsg_to_cv2(msg, desired_encoding='mono8')
+            # Convert mono to 3-channel for consistent JPEG display
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        except Exception as e:
+            self.get_logger().warning(f"[STEREO] Conversion error: {e}")
+            return
+
+        ok, jpeg = cv2.imencode('.jpg', img)
+        if not ok:
+            self.get_logger().warning("[STEREO] JPEG encoding failed")
+            return
+
+        with _latest_stereo_jpeg_lock:
+            _latest_stereo_jpeg = jpeg.tobytes()
+
+    def destroy_node(self):
+        try:
+            self.get_logger().info("Shutting down HTTP server...")
+            self.http_server.shutdown()
+            self.http_server.server_close()
+        except Exception as e:
+            self.get_logger().warning(f"Error shutting down HTTP server: {e}")
+        super().destroy_node()
+
+
+# -------------------------------------------------------------
+# HTTP SERVER
+# -------------------------------------------------------------
+class StreamRequestHandler(BaseHTTPRequestHandler):
+    # Avoid noisy default logging
+    def log_message(self, format, *args):
+        sys.stderr.write("[HTTP] " + format % args + "\n")
+
+    def do_GET(self):
+        # Strip query string (e.g. /rgb.mjpg?t=12345 -> /rgb.mjpg)
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        if path in ("/", "/index.html"):
+            self._serve_html()
+        elif path == "/rgb.mjpg":
+            self._stream(kind="rgb")
+        elif path == "/stereo.mjpg":
+            self._stream(kind="stereo")
+        else:
+            self.send_error(404, "Not Found")
+
+    def _serve_html(self):
+        # Single &lt;img&gt; element; JS toggles between /rgb.mjpg and /stereo.mjpg
+        html = b"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>RealSense Live Stream</title>
+  <style>
+    body {
+      background: #020617;
+      color: #e5e7eb;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 2rem;
+    }
+    h1 { margin-bottom: 1rem; }
+    .buttons { margin-bottom: 1rem; }
+    button {
+      margin: 0 0.5rem;
+      padding: 0.4rem 1rem;
+      border-radius: 999px;
+      border: 1px solid #475569;
+      background: #020617;
+      color: #e5e7eb;
+      cursor: pointer;
+    }
+    button.active {
+      background: #38bdf8;
+      color: #020617;
+    }
+    img {
+      max-width: 90vw;
+      max-height: 70vh;
+      border-radius: 12px;
+      background: black;
+      display: block;
+      margin: 0 auto;
+    }
+    #modeLabel {
+      margin-top: 0.5rem;
+      color: #9ca3af;
+    }
+  </style>
+</head>
+<body>
+  <h1>RealSense D435 Live Stream</h1>
+
+  <div class="buttons">
+    <button id="rgbBtn" class="active">RGB</button>
+    <button id="stereoBtn">Stereo</button>
+  </div>
+
+  <!-- Single stream element -->
+  <img id="stream" src="" alt="Camera stream">
+  <div id="modeLabel">Mode: RGB</div>
+
+<script>
+  const img = document.getElementById('stream');
+  const rgbBtn = document.getElementById('rgbBtn');
+  const stereoBtn = document.getElementById('stereoBtn');
+  const modeLabel = document.getElementById('modeLabel');
+
+  let currentMode = null;
+
+  function startStream(mode) {
+    const base = mode === 'rgb' ? '/rgb.mjpg' : '/stereo.mjpg';
+    const url = base + '?t=' + Date.now(); // cache-buster
+
+    // Close previous connection by clearing src first
+    img.src = '';
+    setTimeout(() => {
+      img.src = url;
+    }, 50);
+
+    currentMode = mode;
+    modeLabel.textContent = 'Mode: ' + (mode === 'rgb' ? 'RGB' : 'Stereo');
+
+    if (mode === 'rgb') {
+      rgbBtn.classList.add('active');
+      stereoBtn.classList.remove('active');
+    } else {
+      stereoBtn.classList.add('active');
+      rgbBtn.classList.remove('active');
+    }
+  }
+
+  rgbBtn.addEventListener('click', () => {
+    if (currentMode !== 'rgb') startStream('rgb');
+  });
+
+  stereoBtn.addEventListener('click', () => {
+    if (currentMode !== 'stereo') startStream('stereo');
+  });
+
+  // Default to RGB on load
+  startStream('rgb');
+</script>
+</body>
+</html>"""
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html")
+        self.send_header("Content-Length", str(len(html)))
+        self.end_headers()
+        self.wfile.write(html)
+
+    # ---- MJPEG Streaming ----
+    def _stream(self, kind: str):
+        global _latest_rgb_jpeg, _latest_stereo_jpeg
+
+        self.send_response(200)
+        self.send_header("Age", "0")
+        self.send_header("Cache-Control", "no-cache, private")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+        self.end_headers()
+
+        while True:
+            try:
+                if kind == "rgb":
+                    with _latest_rgb_jpeg_lock:
+                        frame = _latest_rgb_jpeg
+                else:
+                    with _latest_stereo_jpeg_lock:
+                        frame = _latest_stereo_jpeg
+
+                if frame is None:
+                    time.sleep(0.05)
+                    continue
+
+                # One MJPEG part
+                self.wfile.write(b"--frame\r\n")
+                self.wfile.write(b"Content-Type: image/jpeg\r\n")
+                self.wfile.write(
+                    b"Content-Length: " + str(len(frame)).encode() + b"\r\n\r\n"
+                )
+                self.wfile.write(frame)
+                self.wfile.write(b"\r\n")
+
+                time.sleep(0.03)
+
+            except (BrokenPipeError, ConnectionResetError):
+                break
+            except Exception as e:
+                sys.stderr.write(f"[HTTP] Streaming error (%s): %s\n" % (kind, e))
+                break
+
+
+def start_http_server(host: str = "0.0.0.0", port: int = 8000) -> HTTPServer:
+    server = HTTPServer((host, port), StreamRequestHandler)
+
+    def _serve():
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            pass
+
+    thread = threading.Thread(target=_serve, daemon=True)
+    thread.start()
+    return server
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = RealSenseHttpSubscriber()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+            </pre>
+            <p class="video-tip">
+              The HTTP node acts like a tiny MJPEG server embedded inside your ROS2 node. It always keeps only one active MJPEG connection from the GUI (RGB or Stereo) at a time, which avoids issues with multiple simultaneous MJPEG consumers.
+            </p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-head">Step 3: Run the demo in two terminals</div>
+          <div class="step-body">
+            <div>In terminal 1 (publisher):</div>
+            <pre>
+cd /path/to/ros2_depth_camera_tutorial
+source /opt/ros/humble/setup.bash
+python3 publisher.py
+            </pre>
+
+            <div>In terminal 2 (HTTP subscriber):</div>
+            <pre>
+cd /path/to/ros2_depth_camera_tutorial
+source /opt/ros/humble/setup.bash
+python3 subscriber.py
+            </pre>
+
+            <div>Double check the topics are being published by opening a new terminal, then running:</div>
+            <pre>
+source /opt/ros/humble/setup.bash
+ros2 topic list | grep realsense
+            </pre>
+            <div>You should see:</div>
+            <pre>
+/realsense/color/image_raw
+/realsense/stereo/image_raw
+            </pre>
+
+            <div>Optionally, confirm encodings:</div>
+            <pre>
+ros2 topic echo /realsense/color/image_raw --once
+ros2 topic echo /realsense/stereo/image_raw --once
+            </pre>
+            <div class="video-tip">
+              The color topic should show <code>encoding: "bgr8"</code>. The stereo topic should show <code>encoding: "mono8"</code>.
+            </div>
+
+            <div>Then open your browser to:</div>
+            <pre>
+http://localhost:8000/
+            </pre>
+            <div class="video-tip">
+              You should see a live RealSense stream with a toggle between RGB (color) and Stereo (IR).
+              If you want to access it from another device on the same network, replace <code>localhost</code> with your machine's IP.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="card section" id="section-c">
+      <div class="head">SECTION C: Networking across multiple machines</div>
+      <div class="body">
+        <p>
+          To network across multiple machines, first ensure both computers are on <code>neet01</code> or the same Wi-Fi network.
+        </p>
+
+        <p>
+          Next, set the environment variables so that both publisher and subscribers share the same ROS2 domain ID.
+          On the publisher computer connected to the depth camera:
+        </p>
+        <pre>
+export ROS_DOMAIN_ID=0
+export ROS_LOCALHOST_ONLY=0
+sudo ufw disable
+        </pre>
+
+        <p>On the subscriber machine, set the following environment variables:</p>
+        <pre>
+export ROS_DOMAIN_ID=0
+export ROS_LOCALHOST_ONLY=0
+sudo ufw disable
+        </pre>
+
+        <p>Test that the subscriber computer can see the topics via:</p>
+        <pre>
+ros2 topic list
+        </pre>
+
+        <p>You should see both:</p>
+        <pre>
+/realsense/color/image_raw
+/realsense/stereo/image_raw
+        </pre>
+
+        <p>Get the IP address of the host machine via:</p>
+        <pre>
+hostname -I
+        </pre>
+
+        <p>Now try accessing the server on the other computer by putting the IP address you just found into the browser URL, like so:</p>
+        <pre>
+http://host_IP_address:8000/
+        </pre>
+        <p class="video-tip">
+          You can also hit the raw MJPEG endpoints directly from other machines if needed:
+        </p>
+        <pre>
+http://host_IP_address:8000/rgb.mjpg
+http://host_IP_address:8000/stereo.mjpg
+        </pre>
+      </div>
+    </section>
+
+    <section class="card section" id="explanations">
+      <div class="head">Explanations</div>
+      <div class="body">
+        <p>
+          There are 3 main layers in this setup – the host OS, the ROS2 layer, and the Python scripts:
+        </p>
+
+        <ul class="list">
+          <li>
+            <strong>Host OS + RealSense SDK</strong><br/>
+            Your desktop OS (Ubuntu) runs the Intel RealSense SDK and provides the USB drivers.
+            The <code>pyrealsense2</code> library talks directly to the D435 over the USB connection,
+            enabling both the RGB and IR streams.
+          </li>
+          <li>
+            <strong>ROS2 middleware</strong><br/>
+            ROS2 provides the message-passing backbone. Our publisher node publishes:
+            <ul>
+              <li><code>/realsense/color/image_raw</code> — 640×480, 30 FPS, <code>bgr8</code> color images from the RGB sensor.</li>
+              <li><code>/realsense/stereo/image_raw</code> — 640×480, 30 FPS, <code>mono8</code> infrared images from the left IR sensor.</li>
+            </ul>
+            The subscriber node listens to both topics. Communication uses DDS under the hood in
+            a publish/subscribe pattern, so any other ROS2 node on the same domain can consume these streams as well.
+          </li>
+          <li>
+            <strong>Application nodes (Python)</strong><br/>
+            <code>publisher.py</code> uses <code>pyrealsense2</code> +
+            <code>cv_bridge</code> to convert camera frames into ROS2 Image messages.
+            <code>subscriber.py</code> subscribes to those messages, converts them
+            back to OpenCV images, JPEG-encodes them, and serves them via a tiny HTTP server
+            as MJPEG streams.
+          </li>
+        </ul>
+
+        <p>
+          Conceptually:
+        </p>
+        <ul class="list">
+          <li>
+            The <strong>RGB stream</strong> represents what you expect from a regular webcam: color frames suitable for visualization, logging, or feeding into vision models.
+          </li>
+          <li>
+            The <strong>Stereo / IR stream</strong> is the raw infrared intensity captured by one of the D435’s IR sensors. It is what the camera uses internally for stereo depth estimation. It is:
+            <ul>
+              <li>Monochrome (<code>mono8</code>), then converted to 3-channel for display.</li>
+              <li>Not depth or disparity — just raw IR brightness per pixel.</li>
+              <li>Extremely useful if you want to reason about lighting, IR patterns, or debug depth issues.
+              </li>
+            </ul>
+          </li>
+          <li>
+            The <strong>HTTP MJPEG node</strong> is effectively a bridge from ROS2 to the browser:
+            it maintains the latest JPEG-encoded frames in memory and streams them out as a
+            multipart MJPEG response. The HTML page opens a single MJPEG connection at a time
+            (either RGB or Stereo) and swaps modes by changing the <code>src</code> of the image.
+          </li>
+        </ul>
+
+        <p>
+          You can extend this pattern to publish depth images, point clouds, or other RealSense
+          streams, and expose them via different web front-ends (WebSockets, REST, etc.) while
+          still keeping ROS2 as the messaging backbone.
+        </p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  // TOC active state
+  const ids = ["video","prerequisites","contents","section-a","section-b","section-c","explanations"];
+  const links = Array.from(document.querySelectorAll("nav a"));
+  const map = Object.fromEntries(links.map(a => [a.getAttribute("href").slice(1), a]));
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(a => a.classList.remove("active"));
+        const l = map[e.target.id];
+        if (l) l.classList.add("active");
+      }
+    });
+  }, { rootMargin: "-50% 0px -45% 0px", threshold: [0,1] });
+  ids.forEach(id => { const el = document.getElementById(id); if (el) io.observe(el); });
+
+  // Escape HTML entities in pre blocks to prevent rendering
+  const escapeHtmlInPre = () => {
+    const pres = document.querySelectorAll("pre");
+    pres.forEach(pre => {
+      if (pre.dataset.processed) return;
+      pre.dataset.processed = "1";
+      
+      // Store original HTML content before processing
+      const originalHTML = pre.innerHTML;
+      pre.dataset.originalHTML = originalHTML;
+      
+      // Get text content (this will have HTML tags as text if they were already parsed)
+      let originalText = pre.textContent || pre.innerText;
+      
+      // If HTML was already parsed, we need to reconstruct from original HTML
+      // Create a code element with escaped HTML
+      const code = document.createElement('code');
+      
+      // Use a text node to prevent HTML parsing
+      const textNode = document.createTextNode(originalText);
+      code.appendChild(textNode);
+      
+      // Clear pre and add code element
+      pre.textContent = '';
+      pre.appendChild(code);
+      
+      // Store original text for copying (unescaped version)
+      pre.dataset.originalText = originalText;
+    });
+  };
+  
+  // Add copy buttons to <pre> blocks
+  const addCopyButtons = () => {
+    const pres = document.querySelectorAll("pre");
+    pres.forEach(pre => {
+      if (pre.dataset.hasCopy) return;
+      pre.dataset.hasCopy = "1";
+      const btn = document.createElement("button");
+      btn.className = "copy-btn";
+      btn.innerHTML = `
+        <svg class="copy-icon" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4
+                   a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+        <span>Copy</span>`;
+      btn.addEventListener("click", async () => {
+        // Use original text from data attribute if available, otherwise get text content
+        let codeText = pre.dataset.originalText || pre.textContent.trim();
+        
+        // Unescape HTML entities for proper code copying
+        codeText = codeText
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&amp;/g, '&')
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'");
+        
+        try {
+          await navigator.clipboard.writeText(codeText);
+          btn.classList.add("copied");
+          const span = btn.querySelector("span");
+          const old = span.textContent;
+          span.textContent = "Copied!";
+          setTimeout(() => { btn.classList.remove("copied"); span.textContent = old; }, 1200);
+        } catch (e) {
+          const range = document.createRange();
+          range.selectNodeContents(pre);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      });
+      pre.appendChild(btn);
+    });
+  };
+  
+  escapeHtmlInPre();
+  addCopyButtons();
+</script>
+</body>
+</html>
+
