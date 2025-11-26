@@ -9,9 +9,7 @@ The objective of this demo is to run your own ROS2 Python nodes on a desktop/lap
 * Subscribe to both topics from a second node.
 * Stream the live RGB and IR feeds over HTTP as MJPEG streams with a browser toggle between modes.
 
-A sample result video is expected at:
-
-`static/result.webm`
+<video src="static/result.webm" controls loop muted playsinline style="max-width: 100%; border-radius: 12px;"></video>
 
 The RGB stream is a standard color webcam-like feed. The IR “stereo” stream is the raw mono8 infrared image from the D435’s left IR sensor, which is what the camera uses internally for depth estimation (it is **not** a depth map).
 

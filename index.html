@@ -262,6 +262,7 @@
       </ul>
       <video controls playsinline preload="metadata">
         <source src="static/result.webm" type="video/mp4" />
+        <source src="static/pose_demo.webm" type="video/mp4" />
         Your browser does not support the video tag.
       </video>
       <p class="video-tip">
@@ -940,6 +941,149 @@ http://host_IP_address:8000/stereo.mjpg
         </pre>
       </div>
     </section>
+    
+<section class="card section" id="section-d">
+      <div class="head">SECTION D: Processing the RealSense Camera Frames</div>
+      <div class="body">
+      <p>
+      Let's start by trying to leverage the realsense depth module directly. In line 50 of publisher.py, enable the depth stream like so:
+      <pre>
+      config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+      </pre>
+      
+      Next, in the timer_callback function on line 69, add in a few lines to grab the depth image from the frames like so:
+      
+      <pre>
+depth_frame = frames.get_depth_frame()
+if not depth_frame:
+    return
+
+depth_image = np.asanyarray(depth_frame.get_data())  # uint16 distances in mm
+      </pre>
+      
+      We will want to add some normalization to help visualize the depth. Let's add a color map! Add this directly after the code you just pasted:
+      
+      <pre>
+depth_vis = cv2.normalize(depth_image, None, 0, 255, cv2.NORM_MINMAX)
+depth_vis = depth_vis.astype(np.uint8)
+depth_vis_color = cv2.applyColorMap(depth_vis, cv2.COLORMAP_TURBO)
+      </pre>
+      
+      We will publish depth_vis_color as an Image topic and stream it over HTTP just as we did with the RGB data. You can use a similar pattern to this to apply other image processing techniques on the images.
+      
+      <h3>Pose Estimation and Human Joint Mapping</h3>
+      </p>  In this section, we will practice integrating open source techniques with our data stream. We will leverage the RGB stream by subscribing to it in a separate node and running a pose estimation model.
+      
+      Start by installing necessary packages:
+      <pre>
+      pip install mediapipe opencv-python "numpy<2.0"
+      </pre>
+      
+      Create a file called pose_subscriber.py that subscribes to /realsense/color/image_raw:
+      <pre>
+      #!/usr/bin/env python3
+"""
+ROS2 node that:
+- Subscribes to /realsense/color/image_raw
+- Runs MediaPipe Pose on CPU
+- Draws a skeleton on each frame and shows it via OpenCV imshow
+"""
+
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
+
+import cv2
+import mediapipe as mp
+
+
+class PoseVisualizer(Node):
+    def __init__(self):
+        super().__init__('pose_visualizer')
+
+        # Subscribe to the RGB topic from the RealSense publisher
+        self.subscription = self.create_subscription(
+            Image,
+            '/realsense/color/image_raw',
+            self.image_callback,
+            10
+        )
+
+        self.bridge = CvBridge()
+
+        # Set up MediaPipe Pose 
+        self.mp_pose = mp.solutions.pose
+        self.mp_drawing = mp.solutions.drawing_utils
+        self.pose = self.mp_pose.Pose(
+            static_image_mode=False,
+            model_complexity=1,     # 0, 1, or 2 (higher = heavier / more accurate)
+            enable_segmentation=False,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5,
+        )
+
+        self.get_logger().info("PoseVisualizer initialized and subscribed to /realsense/color/image_raw")
+
+    def image_callback(self, msg: Image):
+        # Convert ROS Image -> OpenCV BGR
+        frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+
+        # MediaPipe expects RGB
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+        # Run pose estimation
+        results = self.pose.process(rgb)
+
+        # Draw pose landmarks on the original BGR frame
+        if results.pose_landmarks:
+            self.mp_drawing.draw_landmarks(
+                frame,
+                results.pose_landmarks,
+                self.mp_pose.POSE_CONNECTIONS
+            )
+
+        # Show the frame in an OpenCV window
+        cv2.imshow("RealSense Pose Estimation", frame)
+        # Small wait so the window updates; also lets user close it with 'q'
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'):
+            self.get_logger().info("Received 'q' keypress, shutting down node...")
+            # rclpy.shutdown() will be called from main
+            raise KeyboardInterrupt
+
+    def destroy_node(self):
+        # Clean up any resources
+        self.get_logger().info("Destroying PoseVisualizer node...")
+        self.pose.close()
+        cv2.destroyAllWindows()
+        super().destroy_node()
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = PoseVisualizer()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.get_logger().info("PoseVisualizer interrupted by user.")
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()
+
+      </pre>
+      
+      This will subscribe to the image_raw topic, run pose estimation on each frame, draw the skeleton, and show it via openCV imshow!      
+      Now, open 3 terminals. Source your ros env in each terminal and run python3 publisher.py, python3 subscriber.py, and python3 pose_subscriber.py in each terminal. Navigate to http://localhost:8000 and you will see the new toggle and stream for depth! You should also seen an openCV window pop up with labelling of face, skeleton, hands, etc! In the future, we can compute metrics from the pose such as elbow angle or extend this to work for other objects, detecting obstacles, etc.
+      <p>
+      
+      </p>
+      </div>
+</section>
 
     <section class="card section" id="explanations">
       <div class="head">Explanations</div>

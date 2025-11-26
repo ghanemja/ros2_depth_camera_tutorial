@@ -1,13 +1,16 @@
+#!/usr/bin/env python3
 """
 ROS2 node that:
 - Subscribes to:
     /realsense/color/image_raw
     /realsense/stereo/image_raw
-- Streams both as MJPEG over HTTP:
+    /realsense/depth_vis
+- Streams all three as MJPEG over HTTP:
     /rgb.mjpg
     /stereo.mjpg
+    /depth.mjpg
 - Serves an HTML page at http://<this-machine-ip>:8000/
-  with a toggle to switch between RGB and Stereo.
+  with a toggle to switch between RGB, Stereo IR, and Depth.
 """
 
 import threading
@@ -21,10 +24,10 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse
 import cv2
 import numpy as np
-from urllib.parse import urlparse
 
 # Global frame storage
 _latest_rgb_jpeg_lock = threading.Lock()
@@ -32,6 +35,9 @@ _latest_rgb_jpeg: Optional[bytes] = None
 
 _latest_stereo_jpeg_lock = threading.Lock()
 _latest_stereo_jpeg: Optional[bytes] = None
+
+_latest_depth_jpeg_lock = threading.Lock()
+_latest_depth_jpeg: Optional[bytes] = None
 
 
 class RealSenseHttpSubscriber(Node):
@@ -41,9 +47,11 @@ class RealSenseHttpSubscriber(Node):
         # Fixed topics to match your publisher
         self.color_topic = "/realsense/color/image_raw"
         self.stereo_topic = "/realsense/stereo/image_raw"
+        self.depth_topic = "/realsense/depth_vis"
 
         self.get_logger().info(f"Subscribing to RGB:    {self.color_topic}")
         self.get_logger().info(f"Subscribing to Stereo: {self.stereo_topic}")
+        self.get_logger().info(f"Subscribing to Depth:  {self.depth_topic}")
 
         self.bridge = CvBridge()
 
@@ -54,13 +62,18 @@ class RealSenseHttpSubscriber(Node):
         self.stereo_sub = self.create_subscription(
             Image, self.stereo_topic, self.stereo_callback, 10
         )
+        self.depth_sub = self.create_subscription(
+            Image, self.depth_topic, self.depth_callback, 10
+        )
 
         # HTTP server
         self.get_logger().info("Starting HTTP server on port 8000...")
         self.http_server = start_http_server(port=8000)
         self.get_logger().info("HTTP server started.")
 
-
+    # ---------------------------------------------------------
+    # Callbacks
+    # ---------------------------------------------------------
     def rgb_callback(self, msg: Image):
         global _latest_rgb_jpeg
 
@@ -98,6 +111,24 @@ class RealSenseHttpSubscriber(Node):
         with _latest_stereo_jpeg_lock:
             _latest_stereo_jpeg = jpeg.tobytes()
 
+    def depth_callback(self, msg: Image):
+        global _latest_depth_jpeg
+
+        try:
+            # Publisher already sends BGR8 colorized depth
+            img = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        except Exception as e:
+            self.get_logger().warning(f"[DEPTH] Conversion error: {e}")
+            return
+
+        ok, jpeg = cv2.imencode('.jpg', img)
+        if not ok:
+            self.get_logger().warning("[DEPTH] JPEG encoding failed")
+            return
+
+        with _latest_depth_jpeg_lock:
+            _latest_depth_jpeg = jpeg.tobytes()
+
     def destroy_node(self):
         try:
             self.get_logger().info("Shutting down HTTP server...")
@@ -108,6 +139,9 @@ class RealSenseHttpSubscriber(Node):
         super().destroy_node()
 
 
+# -------------------------------------------------------------
+# HTTP SERVER
+# -------------------------------------------------------------
 class StreamRequestHandler(BaseHTTPRequestHandler):
     # Avoid noisy default logging
     def log_message(self, format, *args):
@@ -124,6 +158,8 @@ class StreamRequestHandler(BaseHTTPRequestHandler):
             self._stream(kind="rgb")
         elif path == "/stereo.mjpg":
             self._stream(kind="stereo")
+        elif path == "/depth.mjpg":
+            self._stream(kind="depth")
         else:
             # favicon.ico etc. will end up here
             self.send_error(404, "Not Found")
@@ -177,7 +213,8 @@ class StreamRequestHandler(BaseHTTPRequestHandler):
 
   <div class="buttons">
     <button id="rgbBtn" class="active">RGB</button>
-    <button id="stereoBtn">Stereo</button>
+    <button id="stereoBtn">Stereo IR</button>
+    <button id="depthBtn">Depth</button>
   </div>
 
   <!-- Single stream element -->
@@ -188,12 +225,23 @@ class StreamRequestHandler(BaseHTTPRequestHandler):
   const img = document.getElementById('stream');
   const rgbBtn = document.getElementById('rgbBtn');
   const stereoBtn = document.getElementById('stereoBtn');
+  const depthBtn = document.getElementById('depthBtn');
   const modeLabel = document.getElementById('modeLabel');
 
   let currentMode = null;
 
   function startStream(mode) {
-    const base = mode === 'rgb' ? '/rgb.mjpg' : '/stereo.mjpg';
+    let base;
+    if (mode === 'rgb') {
+      base = '/rgb.mjpg';
+    } else if (mode === 'stereo') {
+      base = '/stereo.mjpg';
+    } else if (mode === 'depth') {
+      base = '/depth.mjpg';
+    } else {
+      return;
+    }
+
     const url = base + '?t=' + Date.now(); // cache-buster
 
     // Close previous connection by clearing src first
@@ -203,14 +251,22 @@ class StreamRequestHandler(BaseHTTPRequestHandler):
     }, 50);
 
     currentMode = mode;
-    modeLabel.textContent = 'Mode: ' + (mode === 'rgb' ? 'RGB' : 'Stereo');
 
     if (mode === 'rgb') {
+      modeLabel.textContent = 'Mode: RGB';
       rgbBtn.classList.add('active');
       stereoBtn.classList.remove('active');
-    } else {
+      depthBtn.classList.remove('active');
+    } else if (mode === 'stereo') {
+      modeLabel.textContent = 'Mode: Stereo IR';
       stereoBtn.classList.add('active');
       rgbBtn.classList.remove('active');
+      depthBtn.classList.remove('active');
+    } else if (mode === 'depth') {
+      modeLabel.textContent = 'Mode: Depth';
+      depthBtn.classList.add('active');
+      rgbBtn.classList.remove('active');
+      stereoBtn.classList.remove('active');
     }
   }
 
@@ -220,6 +276,10 @@ class StreamRequestHandler(BaseHTTPRequestHandler):
 
   stereoBtn.addEventListener('click', () => {
     if (currentMode !== 'stereo') startStream('stereo');
+  });
+
+  depthBtn.addEventListener('click', () => {
+    if (currentMode !== 'depth') startStream('depth');
   });
 
   // Default to RGB on load
@@ -234,9 +294,8 @@ class StreamRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(html)
 
-
     def _stream(self, kind: str):
-        global _latest_rgb_jpeg, _latest_stereo_jpeg
+        global _latest_rgb_jpeg, _latest_stereo_jpeg, _latest_depth_jpeg
 
         self.send_response(200)
         self.send_header("Age", "0")
@@ -250,9 +309,14 @@ class StreamRequestHandler(BaseHTTPRequestHandler):
                 if kind == "rgb":
                     with _latest_rgb_jpeg_lock:
                         frame = _latest_rgb_jpeg
-                else:
+                elif kind == "stereo":
                     with _latest_stereo_jpeg_lock:
                         frame = _latest_stereo_jpeg
+                elif kind == "depth":
+                    with _latest_depth_jpeg_lock:
+                        frame = _latest_depth_jpeg
+                else:
+                    frame = None
 
                 if frame is None:
                     time.sleep(0.05)
@@ -275,10 +339,8 @@ class StreamRequestHandler(BaseHTTPRequestHandler):
                 break
 
 
-
-
-def start_http_server(host="0.0.0.0", port=8000) -> HTTPServer:
-    server = HTTPServer((host, port), StreamRequestHandler)
+def start_http_server(host="0.0.0.0", port=8000) -> ThreadingHTTPServer:
+    server = ThreadingHTTPServer((host, port), StreamRequestHandler)
 
     def _serve():
         try:
